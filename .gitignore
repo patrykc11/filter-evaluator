@@ -1,1 +1,9 @@
 /venv
+/images
+/cycleGAN/images
+/cycleGAN/images_subs
+/cycleGAN/pretrained
+/cycleGAN/labels
+/cycleGAN/operations_list.txt
+/cycleGAN/*.pth
+cycleGAN/__pycache__/main.cpython-312.pyc
