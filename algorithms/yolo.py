@@ -4,11 +4,11 @@
 from ultralytics import YOLO
 import os
 import shutil
-from PIL import Image
+import cv2
 
 model = YOLO("yolov8n.pt")
 
-input_folder = 'images/original_day'
+input_folder = 'images/sgu_images'
 output_folder = 'images/yolo_output_images'
 
 if os.path.exists(output_folder):
@@ -17,13 +17,9 @@ if os.path.exists(output_folder):
 os.makedirs(output_folder, exist_ok=True)
 
 for filename in os.listdir(input_folder):
-    if filename.endswith('.jpg'):
+    if filename.endswith(('.jpg', '.png')):
         image_path = os.path.join(input_folder, filename)
-        results = model(image_path)
-        print(results)
-        for img in results.imgs:
-            img_with_boxes = results.render(img)
-            output_image_path = os.path.join(output_folder, filename)
-            Image.fromarray(img_with_boxes).save(output_image_path)
-
-        print(f"Zdjęcie {filename} zostało przetworzone i zapisane w {output_image_path}")
+        results = model(image_path, classes=[0])
+        annotated_frame = results[0].plot()
+        output_image_path = os.path.join(output_folder, filename)
+        cv2.imwrite(output_image_path, annotated_frame)
