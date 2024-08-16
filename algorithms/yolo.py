@@ -6,10 +6,10 @@ import os
 import shutil
 import cv2
 
-model = YOLO("yolov8n.pt")
+model = YOLO("ready-models/yolov8x.pt")
 
-input_folder = 'images/sgu_images'
-output_folder = 'images/yolo_output_images'
+input_folder = 'images/original_night'
+output_folder = 'images/custom_filter_yolo_8n'
 
 if os.path.exists(output_folder):
     shutil.rmtree(output_folder)
@@ -17,7 +17,7 @@ if os.path.exists(output_folder):
 os.makedirs(output_folder, exist_ok=True)
 
 for filename in os.listdir(input_folder):
-    if filename.endswith(('.jpg', '.png')):
+    if filename.endswith(('.jpg', '.png', '.jpeg')):
         image_path = os.path.join(input_folder, filename)
         results = model(image_path, classes=[0])
         annotated_frame = results[0].plot()

@@ -12,8 +12,8 @@ model.roi_heads.nms_thresh = 0.3
 model.roi_heads.score_thresh = 0.3
 model.eval()
 
-input_folder = 'images/sgu_images'
-output_folder = 'images/r_cnn_output_images'
+input_folder = 'images/original_night'
+output_folder = 'images/custom_filter_r_cnn'
 
 if os.path.exists(output_folder):
     shutil.rmtree(output_folder)
@@ -21,7 +21,7 @@ os.makedirs(output_folder, exist_ok=True)
 
 with torch.no_grad():
     for filename in os.listdir(input_folder):
-        if filename.endswith(('.jpg', '.png')):
+        if filename.endswith(('.jpg', '.png', '.jpeg')):
             image_path = os.path.join(input_folder, filename)
             image = Image.open(image_path).convert("RGB")
             image_tensor = F.to_tensor(image).unsqueeze(0)

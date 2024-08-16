@@ -1,3 +1,3 @@
 from enum import Enum
 
-FILTER = Enum('Filter', ['SID', 'AU_GAN', 'CUSTOM_FILTER'])
+FILTER = Enum('Filter', ['SID', 'CYCLE_GAN', 'CUSTOM_FILTER'])

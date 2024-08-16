@@ -1,5 +1,7 @@
 # https://learnopencv.com/improving-illumination-in-night-time-images/
 
+import os
+import shutil
 import cv2
 import numpy as np
 from PIL import Image
@@ -11,10 +13,57 @@ http://research.microsoft.com/en-us/um/people/kahe/eccv10/
 """
 from itertools import combinations_with_replacement
 from collections import defaultdict
-
+import time
 from numpy.linalg import inv
 
 R, G, B = 0, 1, 2  # index for convenience
+
+# 1. Getting dark or light illumination channel of image
+def get_illumination_channel(I, w):
+    M, N, _ = I.shape
+    # padding for channels
+    padded = np.pad(I, ((int(w/2), int(w/2)), (int(w/2), int(w/2)), (0, 0)), 'edge')
+    darkch = np.zeros((M, N))
+    brightch = np.zeros((M, N))
+ 
+    for i, j in np.ndindex(darkch.shape):
+        darkch[i, j] = np.min(padded[i:i + w, j:j + w, :]) # dark channel
+        brightch[i, j] = np.max(padded[i:i + w, j:j + w, :]) # bright channel
+ 
+    return darkch, brightch
+
+# 2. Computing Global Atmosphere Lighting
+def get_atmosphere(I, brightch, p=0.3, threshold=100):
+    M, N = brightch.shape
+    flatI = I.reshape(M*N, 3)  # reshaping image array
+    flatbright = brightch.ravel()  # flattening image array
+
+    searchidx = (-flatbright).argsort()[:int(M*N*p)] # sorting and slicing
+    A = np.mean(flatI.take(searchidx, axis=0), dtype=np.float64, axis=0)
+    return A
+
+# 3. Finding the Initial Transmission Map
+def get_initial_transmission(A, brightch):
+    A_c = np.max(A)
+    init_t = (brightch-A_c)/(1.-A_c) # finding initial transmission map
+    return (init_t - np.min(init_t))/(np.max(init_t) - np.min(init_t)) # normalized initial transmission map
+
+# 4. Using Dark Channel to Estimate Corrected Transmission Map
+def get_corrected_transmission(I, A, darkch, brightch, init_t, alpha, omega, w):
+    im = np.empty(I.shape, I.dtype);
+    for ind in range(0, 3):
+        im[:, :, ind] = I[:, :, ind] / A[ind] #divide pixel values by atmospheric light
+    dark_c, _ = get_illumination_channel(im, w) # dark channel transmission map
+    dark_t = 1 - omega*dark_c # corrected dark transmission map
+    corrected_t = init_t # initializing corrected transmission map with initial transmission map
+    diffch = brightch - darkch # difference between transmission maps
+ 
+    for i in range(diffch.shape[0]):
+        for j in range(diffch.shape[1]):
+            if(diffch[i, j] < alpha):
+                corrected_t[i, j] = dark_t[i, j] * init_t[i, j]
+ 
+    return np.abs(corrected_t)
 
 def boxfilter(I, r):
     """Fast box filter implementation.
@@ -55,7 +104,7 @@ def boxfilter(I, r):
 
     return dest
 
-
+# 5. Smoothing Transmission Map using Guided Filter
 def guided_filter(I, p, r=15, eps=1e-3):
     """Refine a filter under the guidance of another (RGB) image.
 
@@ -109,69 +158,14 @@ def guided_filter(I, p, r=15, eps=1e-3):
 
     return q
 
-
-
-def get_illumination_channel(I, w):
-    M, N, _ = I.shape
-    # padding for channels
-    padded = np.pad(I, ((int(w/2), int(w/2)), (int(w/2), int(w/2)), (0, 0)), 'edge')
-    darkch = np.zeros((M, N))
-    brightch = np.zeros((M, N))
- 
-    for i, j in np.ndindex(darkch.shape):
-        darkch[i, j] = np.min(padded[i:i + w, j:j + w, :]) # dark channel
-        brightch[i, j] = np.max(padded[i:i + w, j:j + w, :]) # bright channel
- 
-    return darkch, brightch
-
-
-def get_atmosphere(I, brightch, p=0.3, threshold=100):
-    M, N = brightch.shape
-    flatI = I.reshape(M*N, 3)  # reshaping image array
-    flatbright = brightch.ravel()  # flattening image array
-
-    # Filtrowanie pikseli poniżej progu
-    mask = flatbright <= threshold
-    flatI = flatI[mask]
-    flatbright = flatbright[mask]
-
-    searchidx = (-flatbright).argsort()[:int(M * len(flatbright) * p)]  # sorting and slicing
-    A = np.mean(flatI.take(searchidx, axis=0), dtype=np.float64, axis=0)
-    return A
-
-
-
-def get_initial_transmission(A, brightch):
-    A_c = np.max(A)
-    init_t = (brightch-A_c)/(1.-A_c) # finding initial transmission map
-    return (init_t - np.min(init_t))/(np.max(init_t) - np.min(init_t)) # normalized initial transmission map
-
-
-def get_corrected_transmission(I, A, darkch, brightch, init_t, alpha, omega, w):
-    im = np.empty(I.shape, I.dtype)
-    for ind in range(0, 3):
-        im[:, :, ind] = I[:, :, ind] / A[ind] #divide pixel values by atmospheric light
-    dark_c, _ = get_illumination_channel(im, w) # dark channel transmission map
-    dark_t = 1 - omega*dark_c # corrected dark transmission map
-    corrected_t = init_t # initializing corrected transmission map with initial transmission map
-    diffch = brightch - darkch # difference between transmission maps
- 
-    for i in range(diffch.shape[0]):
-        for j in range(diffch.shape[1]):
-            if(diffch[i, j] < alpha):
-                corrected_t[i, j] = dark_t[i, j] * init_t[i, j]
- 
-    return np.abs(corrected_t)
-
-# guided filter
-
+# 6. Calculating the Resultant Image
 def get_final_image(I, A, refined_t, tmin):
     refined_t_broadcasted = np.broadcast_to(refined_t[:, :, None], (refined_t.shape[0], refined_t.shape[1], 3)) # duplicating the channel of 2D refined map to 3 channels
     J = (I-A) / (np.where(refined_t_broadcasted < tmin, tmin, refined_t_broadcasted)) + A # finding result 
  
-    return (J - np.min(J))/(np.max(J) - np.min(J)) # normalized image
+    return (J - np.min(J))/(np.max(J) - np.min(J)) # normalized im
 
-
+# reduce these intense spots of white
 def reduce_init_t(init_t):
     init_t = (init_t*255).astype(np.uint8) 
     xp = [0, 32, 255]
@@ -182,9 +176,9 @@ def reduce_init_t(init_t):
     init_t = init_t.astype(np.float64)/255 # normalizing the transmission map
     return init_t
 
-
-def dehaze(I, tmin=0.1, w=15, alpha=0.4, omega=0.75, p=0.1, eps=1e-3, reduce=False):
-    I = np.asarray(I, dtype=np.float64) # Convert the input to a float array.
+# final step
+def dehaze(im, tmin=0.1, w=15, alpha=0.4, omega=0.75, p=0.1, eps=1e-3, reduce=False):
+    I = np.asarray(im, dtype=np.float64) # Convert the input to a float array.
     I = I[:, :, :3] / 255
     m, n, _ = I.shape
     Idark, Ibright = get_illumination_channel(I, w)
@@ -204,9 +198,23 @@ def dehaze(I, tmin=0.1, w=15, alpha=0.4, omega=0.75, p=0.1, eps=1e-3, reduce=Fal
     f_enhanced = cv2.edgePreservingFilter(f_enhanced, flags=1, sigma_s=64, sigma_r=0.2)
     return f_enhanced
 
+input_folder = 'images/original_night'
+output_folder = 'images/custom_filter_images'
 
-image = Image.open("images/sgu_images/276.png").convert('RGB')
-image_array = np.array(image)
-image_after_filter = dehaze(image_array)
-output_image = Image.fromarray(image_after_filter)
-output_image.show()
+if os.path.exists(output_folder):
+    shutil.rmtree(output_folder)
+
+os.makedirs(output_folder, exist_ok=True)
+
+for filename in os.listdir(input_folder):
+    if filename.endswith(('.jpg', '.png', '.jpeg')):
+        image_path = os.path.join(input_folder, filename)
+        image = Image.open(image_path).convert('RGB')
+        image_array = np.array(image)
+        start_time = time.time()
+        image_after_filter = dehaze(image_array, reduce=True)
+        conversion_time = time.time() - start_time
+        image_after_filter = cv2.cvtColor(image_after_filter, cv2.COLOR_RGB2BGR)
+        output_image_path = os.path.join(output_folder, filename)
+        cv2.imwrite(output_image_path, image_after_filter)
+        print(f"Conversion time for {filename}: {conversion_time:.3f} seconds")

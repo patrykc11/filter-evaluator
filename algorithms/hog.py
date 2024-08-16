@@ -35,7 +35,7 @@ class HogDetector:
 
 def test():
     detector = HogDetector()
-    image_paths = glob.glob('./images/original_night/*.jpg') + glob.glob('./images/original_night/*.png')
+    image_paths = glob.glob('./images/original_night/*.jpg') + glob.glob('./images/original_night/*.png') + glob.glob('./images/original_night/*.jpeg')
     output_dir = './images/hog_output_images'
     shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
