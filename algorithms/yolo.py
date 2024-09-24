@@ -5,11 +5,12 @@ from ultralytics import YOLO
 import os
 import shutil
 import cv2
+import sys
 
 model = YOLO("ready-models/yolov8x.pt")
 
-input_folder = 'images/original_night'
-output_folder = 'images/custom_filter_yolo_8n'
+input_folder = 'images/' + sys.argv[1]
+output_folder = input_folder + '_yolo_8x'
 
 if os.path.exists(output_folder):
     shutil.rmtree(output_folder)

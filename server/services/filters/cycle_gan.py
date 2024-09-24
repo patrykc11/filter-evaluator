@@ -1,3 +1,4 @@
+import cv2
 import torch
 import torch.nn as nn
 from torchvision import transforms
@@ -6,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from collections import OrderedDict
 
-# Definicja modelu
 class ResidualBlock(nn.Module):
     def __init__(self, in_features):
         super(ResidualBlock, self).__init__()
@@ -26,7 +26,6 @@ class GeneratorResNet(nn.Module):
         super(GeneratorResNet, self).__init__()
         channels = input_shape[0]
 
-        # Initial convolution block
         out_features = 64
         model = [
             nn.Conv2d(channels, out_features, 7, stride=1, padding=3),
@@ -34,7 +33,6 @@ class GeneratorResNet(nn.Module):
             nn.ReLU(inplace=True)
         ]
 
-        # Downsampling
         in_features = out_features
         for _ in range(2):
             out_features *= 2
@@ -45,11 +43,9 @@ class GeneratorResNet(nn.Module):
             ]
             in_features = out_features
 
-        # Residual blocks
         for _ in range(num_residual_blocks):
             model += [ResidualBlock(out_features)]
 
-        # Upsampling
         for _ in range(2):
             out_features //= 2
             model += [
@@ -59,7 +55,6 @@ class GeneratorResNet(nn.Module):
             ]
             in_features = out_features
 
-        # Output layer
         model += [nn.Conv2d(out_features, channels, 7, stride=1, padding=3), nn.Tanh()]
 
         self.model = nn.Sequential(*model)
@@ -67,41 +62,19 @@ class GeneratorResNet(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-# Ustawienia
-input_shape = (3, 256, 256)
-cuda = torch.cuda.is_available()
-
-# Tworzenie instancji modelu
-G = GeneratorResNet(input_shape, num_residual_blocks=9)
-
-# Wczytywanie checkpointu
-checkpoint_path = 'models/checkpoint_epoch_199_batch_500.pth'
-checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-state_dict = checkpoint['G_state_dict']
-
-new_state_dict = OrderedDict()
-for k, v in state_dict.items():
-    name = k.replace("module.", "")  # usuwamy prefiks "module."
-    new_state_dict[name] = v
-
-G.load_state_dict(new_state_dict)
-# Ustawienie modelu w tryb ewaluacji
-G.eval()
-
-# Przykład przetwarzania obrazu
 def preprocess_image(image):
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
-    return transform(image).unsqueeze(0)  # Dodanie wymiaru batcha
+    return transform(image).unsqueeze(0)
 
 def deprocess_image(tensor):
     inv_transform = transforms.Compose([
         transforms.Normalize((-1, -1, -1), (2, 2, 2)),
         transforms.ToPILImage(),
     ])
-    image = tensor.squeeze(0)  # Usunięcie wymiaru batcha
+    image = tensor.squeeze(0)
     return inv_transform(image)
 
 def split_image(image, patch_size=256, overlap=32):
@@ -152,37 +125,47 @@ def combine_patches(patches, image_size, patch_size=256, overlap=32):
     
     return new_image
 
-# Przetwarzanie obrazu
-input_image_path = '../images/original_night/image_4.png'
-input_image = Image.open(input_image_path).convert('RGB')
-patches = split_image(input_image)
+cuda_available = torch.cuda.is_available()
+device = torch.device('cuda' if cuda_available else 'cpu')
+print(f"Using device: {device}")
 
-processed_patches = []
-for patch in patches:
-    input_patch = preprocess_image(patch)
-    if cuda:
-        input_patch = input_patch.cuda()
-    
-    with torch.no_grad():
-        output_patch = G(input_patch)
-    
-    output_patch = deprocess_image(output_patch.cpu())
-    processed_patches.append(output_patch)
+input_shape = (3, 256, 256)
+G = GeneratorResNet(input_shape, num_residual_blocks=9)
 
-output_image = combine_patches(processed_patches, input_image.size)
+checkpoint_path = 'models/cycle_gan_model.pth'
+checkpoint = torch.load(checkpoint_path, map_location=device)
 
-# Wyświetlenie obrazów oryginalnego i przetworzonego obok siebie
-def show_images(original, processed):
-    fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-    axs[0].imshow(original)
-    axs[0].set_title('Original Image')
-    axs[0].axis('off')
-    
-    axs[1].imshow(processed)
-    axs[1].set_title('Processed Image')
-    axs[1].axis('off')
-    
-    plt.show()
+state_dict = checkpoint['G_state_dict']
 
-# Wyświetlenie obrazów
-show_images(input_image, output_image)
+new_state_dict = OrderedDict()
+for k, v in state_dict.items():
+    name = k.replace("module.", "")
+    new_state_dict[name] = v
+
+G.load_state_dict(new_state_dict)
+G.to(device)
+G.eval()
+
+def process_with_cyclegan(input_image: Image.Image) -> Image.Image:
+    patches = split_image(input_image)
+
+    processed_patches = []
+    for patch in patches:
+        input_patch = preprocess_image(patch)
+        input_patch = input_patch.to(device)  
+
+        with torch.no_grad():
+            output_patch = G(input_patch)
+
+        output_patch = deprocess_image(output_patch.cpu())
+        processed_patches.append(output_patch)
+
+    output_image = combine_patches(processed_patches, input_image.size)
+
+    output_image = np.array(output_image)
+    image_after_filter = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
+
+    return Image.fromarray(cv2.cvtColor(image_after_filter, cv2.COLOR_BGR2RGB))
+
+
+

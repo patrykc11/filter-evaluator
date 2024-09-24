@@ -21,18 +21,14 @@ class Evaluator:
         self.print_metrics_table(metrics_table)
     
     def calculate_detection_results(self, method, filter):
-        # Tu należy zaimplementować logikę obliczania wyników detekcji dla danej metody i filtru
-        # Możesz zwracać losowe wartości dla celów demonstracyjnych
         true_positives = 5
         false_positives = 10
         false_negatives = 32
         true_negatives = 4
-        return true_positives, false_positives, faslse_negatives, true_negatives
+        return true_positives, false_positives, false_negatives, true_negatives
     
     def calculate_processing_time(self, method, filter):
-        # Tu należy zaimplementować logikę obliczania czasu przetwarzania dla danej metody i filtru
-        # Możesz zwracać losowe wartości dla celów demonstracyjnych
-        processing_time_per_image = 0.02  # np. 20 ms na obraz
+        processing_time_per_image = 0.02
         return processing_time_per_image
     
     def print_metrics_table(self, metrics_table):

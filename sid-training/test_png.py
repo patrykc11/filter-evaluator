@@ -4,35 +4,29 @@ import numpy as np
 import os
 import glob
 from PIL import Image
-from tensorflow.keras.layers import Conv2D, Conv2DTranspose, MaxPooling2D, Input, concatenate, Lambda
+from tensorflow.keras.layers import Conv2D, Conv2DTranspose, MaxPooling2D, Input, concatenate
 
-test_input_dir = './images/images_iseo_garibaldi/'
-test_result_dir = './images/sid_images_iseo_garibaldi/'
-checkpoint_dir = './sid-training/checkpoints/'
+test_input_dir = './dataset/png/images_brugia/'
+test_result_dir = './results_png/images_brugia/'
+checkpoint_dir = './checkpoints/'
 
 os.makedirs(test_result_dir, exist_ok=True)
 
 def adjust_brightness(image, threshold=0.9, factor=0.5):
-
     bright_pixels = image > threshold
-    
     image[bright_pixels] = image[bright_pixels] * factor
-    
     return image
 
 def load_image(image_path):
-    target_size = (4256, 2848)  
+    target_size = (4256, 2848)
     image = Image.open(image_path)
     image = image.convert('RGB')
     image = image.resize(target_size, Image.LANCZOS)
-    image = np.array(image, dtype=np.float32) / 255.0 
+    image = np.array(image, dtype=np.float32) / 255.0
     return image
 
 def lrelu(x, alpha=0.2):
     return tf.maximum(alpha * x, x)
-
-def depth_to_space(x, block_size):
-    return tf.nn.depth_to_space(x, block_size)
 
 def network(input_tensor):
     conv1 = Conv2D(32, (3, 3), activation=lrelu, padding='same')(input_tensor)
@@ -74,8 +68,7 @@ def network(input_tensor):
     conv9 = Conv2D(32, (3, 3), activation=lrelu, padding='same')(up9)
     conv9 = Conv2D(32, (3, 3), activation=lrelu, padding='same')(conv9)
 
-    conv10 = Conv2D(3, (1, 1), activation=None, padding='same')(conv9) 
-
+    conv10 = Conv2D(3, (1, 1), activation=None, padding='same')(conv9)
     return conv10
 
 input_tensor = Input(shape=(None, None, 3))

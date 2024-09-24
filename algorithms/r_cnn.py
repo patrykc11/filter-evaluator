@@ -6,14 +6,15 @@ import matplotlib.pyplot as plt
 import os
 import shutil
 import time
+import sys
 
 model = fasterrcnn_resnet50_fpn(weights=FasterRCNN_ResNet50_FPN_Weights.DEFAULT)
 model.roi_heads.nms_thresh = 0.3
 model.roi_heads.score_thresh = 0.3
 model.eval()
 
-input_folder = 'images/original_night'
-output_folder = 'images/custom_filter_r_cnn'
+input_folder = 'images/' + sys.argv[1]
+output_folder = input_folder + '_r_cnn'
 
 if os.path.exists(output_folder):
     shutil.rmtree(output_folder)

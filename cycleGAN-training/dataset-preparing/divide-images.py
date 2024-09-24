@@ -11,7 +11,6 @@ def create_subset(source_dir, target_dir, num_images):
         dst_path = os.path.join(target_dir, file_name)
         shutil.copyfile(src_path, dst_path)
 
-# Paths
 source_dir_train_night = 'images/train/night'
 source_dir_train_day = 'images/train/day'
 source_dir_val_night = 'images/val/night'
@@ -22,17 +21,14 @@ target_dir_train_day = 'images_subs/train/day'
 target_dir_val_night = 'images_subs/val/night'
 target_dir_val_day = 'images_subs/val/day'
 
-# Number of images to use in the subset
-num_images_train = 10000  # Number of images to use for training
-num_images_val = 4000  # Number of images to use for validation
+num_images_train = 10000
+num_images_val = 4000
 
-# Create directories
 os.makedirs(target_dir_train_night, exist_ok=True)
 os.makedirs(target_dir_train_day, exist_ok=True)
 os.makedirs(target_dir_val_night, exist_ok=True)
 os.makedirs(target_dir_val_day, exist_ok=True)
 
-# Create subsets
 create_subset(source_dir_train_night, target_dir_train_night, num_images_train)
 create_subset(source_dir_train_day, target_dir_train_day, num_images_train)
 create_subset(source_dir_val_night, target_dir_val_night, num_images_val)

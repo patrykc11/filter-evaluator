@@ -28,7 +28,6 @@ class GeneratorResNet(nn.Module):
         super(GeneratorResNet, self).__init__()
         channels = input_shape[0]
 
-        # Initial convolution block
         out_features = 64
         model = [
             nn.Conv2d(channels, out_features, 7, stride=1, padding=3),
@@ -36,7 +35,6 @@ class GeneratorResNet(nn.Module):
             nn.ReLU(inplace=True)
         ]
 
-        # Downsampling
         in_features = out_features
         for _ in range(2):
             out_features *= 2
@@ -47,11 +45,9 @@ class GeneratorResNet(nn.Module):
             ]
             in_features = out_features
 
-        # Residual blocks
         for _ in range(num_residual_blocks):
             model += [ResidualBlock(out_features)]
 
-        # Upsampling
         for _ in range(2):
             out_features //= 2
             model += [
@@ -61,7 +57,6 @@ class GeneratorResNet(nn.Module):
             ]
             in_features = out_features
 
-        # Output layer
         model += [nn.Conv2d(out_features, channels, 7, stride=1, padding=3), nn.Tanh()]
 
         self.model = nn.Sequential(*model)
@@ -149,13 +144,11 @@ if __name__ == '__main__':
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ]
 
-    # Paths to night and day images
     dataloader = DataLoader(ImageDataset('images_subs', transforms_=transform), batch_size=8, shuffle=True, num_workers=8)
 
     cuda = torch.cuda.is_available()
     input_shape = (3, 256, 256)
 
-    # Initialize generator and discriminator
     G = GeneratorResNet(input_shape, num_residual_blocks=9)
     F = GeneratorResNet(input_shape, num_residual_blocks=9)
     D_X = Discriminator(input_shape)
@@ -167,21 +160,17 @@ if __name__ == '__main__':
         D_X = nn.DataParallel(D_X).cuda()
         D_Y = nn.DataParallel(D_Y).cuda()
 
-    # Losses
     criterion_GAN = torch.nn.MSELoss()
     criterion_cycle = torch.nn.L1Loss()
     criterion_identity = torch.nn.L1Loss()
 
-    # Optimizers
     optimizer_G = torch.optim.Adam(itertools.chain(G.parameters(), F.parameters()), lr=0.0002, betas=(0.5, 0.999))
     optimizer_D_X = torch.optim.Adam(D_X.parameters(), lr=0.0002, betas=(0.5, 0.999))
     optimizer_D_Y = torch.optim.Adam(D_Y.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
-    # Buffers of previously generated samples
     fake_X_buffer = []
     fake_Y_buffer = []
 
-    # Calculate the output shape of D_X
     with torch.no_grad():
         if cuda:
             example_data = torch.randn(1, *input_shape).cuda()
@@ -189,32 +178,24 @@ if __name__ == '__main__':
             example_data = torch.randn(1, *input_shape)
         output_shape = D_X(example_data).shape[1:]
 
-    # Training
+
     for epoch in range(500):
         for i, batch in enumerate(dataloader):
-            start_time = time.time()  # Start time for the iteration
-            
-            # Set model input
+            start_time = time.time()
+
             real_X = batch['X'].cuda() if cuda else batch['X']
             real_Y = batch['Y'].cuda() if cuda else batch['Y']
 
-            # Adversarial ground truths
             valid = torch.ones((real_X.size(0), *output_shape), requires_grad=False).cuda() if cuda else torch.ones((real_X.size(0), *output_shape), requires_grad=False)
             fake = torch.zeros((real_X.size(0), *output_shape), requires_grad=False).cuda() if cuda else torch.zeros((real_X.size(0), *output_shape), requires_grad=False)
 
-            # ------------------
-            #  Train Generators
-            # ------------------
-
             optimizer_G.zero_grad()
 
-            # Identity loss
             loss_id_X = criterion_identity(F(real_X), real_X)
             loss_id_Y = criterion_identity(G(real_Y), real_Y)
 
             loss_identity = (loss_id_X + loss_id_Y) / 2
 
-            # GAN loss
             fake_Y = G(real_X)
             loss_GAN_XY = criterion_GAN(D_Y(fake_Y), valid)
             fake_X = F(real_Y)
@@ -222,7 +203,6 @@ if __name__ == '__main__':
 
             loss_GAN = (loss_GAN_XY + loss_GAN_YX) / 2
 
-            # Cycle loss
             recovered_X = F(fake_Y)
             loss_cycle_XYX = criterion_cycle(recovered_X, real_X)
             recovered_Y = G(fake_X)
@@ -230,61 +210,44 @@ if __name__ == '__main__':
 
             loss_cycle = (loss_cycle_XYX + loss_cycle_YXY) / 2
 
-            # Total loss
             loss_G = loss_GAN + 10.0 * loss_cycle + 5.0 * loss_identity
 
             loss_G.backward()
             optimizer_G.step()
 
-            # -----------------------
-            #  Train Discriminator X
-            # -----------------------
-
             optimizer_D_X.zero_grad()
 
-            # Real loss
             loss_real = criterion_GAN(D_X(real_X), valid)
-            # Fake loss (on batch of previously generated samples)
             fake_X = fake_X_buffer.pop(0) if len(fake_X_buffer) > 0 else fake_X
             loss_fake = criterion_GAN(D_X(fake_X.detach()), fake)
 
-            # Total loss
             loss_D_X = (loss_real + loss_fake) / 2
 
             loss_D_X.backward()
             optimizer_D_X.step()
-
-            # -----------------------
-            #  Train Discriminator Y
-            # -----------------------
-
             optimizer_D_Y.zero_grad()
 
-            # Real loss
+
             loss_real = criterion_GAN(D_Y(real_Y), valid)
-            # Fake loss (on batch of previously generated samples)
             fake_Y = fake_Y_buffer.pop(0) if len(fake_Y_buffer) > 0 else fake_Y
             loss_fake = criterion_GAN(D_Y(fake_Y.detach()), fake)
 
-            # Total loss
             loss_D_Y = (loss_real + loss_fake) / 2
 
             loss_D_Y.backward()
             optimizer_D_Y.step()
 
-            # Buffer fake samples
             fake_X_buffer.append(fake_X)
             fake_Y_buffer.append(fake_Y)
 
-            end_time = time.time()  # End time for the iteration
-            iteration_time = end_time - start_time  # Calculate iteration time
+            end_time = time.time()
+            iteration_time = end_time - start_time 
 
             print(f'[Epoch {epoch}/{200}] [Batch {i}/{len(dataloader)}] '
                 f'[D loss: {loss_D_X.item() + loss_D_Y.item()}] '
                 f'[G loss: {loss_G.item()}] '
                 f'[Iteration Time: {iteration_time:.4f} seconds]')
-            
-            # Save the model every 100 batches
+
             if i % 500 == 0:
                 save_checkpoint(epoch, i, G, F, D_X, D_Y, optimizer_G, optimizer_D_X, optimizer_D_Y)
 

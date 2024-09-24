@@ -65,25 +65,6 @@ class GeneratorResNet(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-input_shape = (3, 256, 256)
-cuda = torch.cuda.is_available()
-
-G = GeneratorResNet(input_shape, num_residual_blocks=9)
-
-checkpoint_path = 'ready-models/checkpoint_epoch_199_batch_500.pth'
-checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-
-state_dict = checkpoint['G_state_dict']
-
-new_state_dict = OrderedDict()
-for k, v in state_dict.items():
-    name = k.replace("module.", "")  # usuwamy prefiks "module."
-    new_state_dict[name] = v
-
-G.load_state_dict(new_state_dict)
-
-G.eval()
-
 def preprocess_image(image):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -147,8 +128,27 @@ def combine_patches(patches, image_size, patch_size=256, overlap=32):
     
     return new_image
 
+input_shape = (3, 256, 256)
+cuda = torch.cuda.is_available()
+
+G = GeneratorResNet(input_shape, num_residual_blocks=9)
+
+checkpoint_path = 'ready-models/ja_wiem_od_kogo_wy_sa.pth'
+checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
+
+state_dict = checkpoint['G_state_dict']
+
+new_state_dict = OrderedDict()
+for k, v in state_dict.items():
+    name = k.replace("module.", "")
+    new_state_dict[name] = v
+
+G.load_state_dict(new_state_dict)
+
+G.eval()
+
 input_folder = 'images/original_night'
-output_folder = 'images/cycle_gan_output_images'
+output_folder = 'images/cycle_gan_original_night'
 
 if os.path.exists(output_folder):
     shutil.rmtree(output_folder)
